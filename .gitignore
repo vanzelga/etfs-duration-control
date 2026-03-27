@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 venv/
 logs/
+debug/
 output/
-temp/
 *.xlsx
 *.xlsm
