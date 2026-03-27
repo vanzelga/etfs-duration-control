@@ -1,36 +1,37 @@
-import json
-import pandas as pd
-import requests
-
-META_BASE_URL = "http://metabase-funds/api/public/card/353113d3-65c5-4912-aafa-6aed1ef5cac3/query/json"
-META_PARAMETER_ID = "08263a25-a495-9bb4-ec3c-d27f3be5a69b"
-TIMEOUT = 60
+import os
+import re
+from datetime import datetime
 
 
-def build_metabase_parameters(data_carteira: str) -> str:
-    payload = [
-        {
-            "type": "date/single",
-            "value": data_carteira,
-            "target": ["variable", ["template-tag", "DataCarteira"]],
-            "id": META_PARAMETER_ID,
-        }
-    ]
-    return json.dumps(payload, separators=(",", ":"))
+def ensure_dirs(*dirs: str) -> None:
+    for directory in dirs:
+        os.makedirs(directory, exist_ok=True)
 
 
-def fetch_metabase_data(data_carteira: str) -> pd.DataFrame:
-    params = {"parameters": build_metabase_parameters(data_carteira)}
-    response = requests.get(META_BASE_URL, params=params, timeout=TIMEOUT)
-    response.raise_for_status()
+def parse_iso_date(date_str: str):
+    return datetime.strptime(date_str, "%Y-%m-%d").date()
 
-    data = response.json()
-    df = pd.DataFrame(data)
 
-    if df.empty:
-        return df
+def br_date(d) -> str:
+    return d.strftime("%d/%m/%Y")
 
-    df["DataCarteira"] = data_carteira
-    df["NuIsin"] = df["NuIsin"].astype(str).str.strip().str.upper()
 
-    return df
+def ver_date(d) -> str:
+    return d.strftime("%Y%m%d")
+
+
+def br_number_to_python(value: str):
+    value = value.strip()
+
+    if value == "":
+        return None
+
+    if re.fullmatch(r"\d{2}/\d{2}/\d{4}", value):
+        return value
+
+    if re.fullmatch(r"-?\d{1,3}(?:\.\d{3})*(?:,\d+)?", value) or re.fullmatch(r"-?\d+(?:,\d+)?", value):
+        normalized = value.replace(".", "").replace(",", ".")
+        num = float(normalized)
+        return int(num) if num.is_integer() else num
+
+    return value

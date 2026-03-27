@@ -66,6 +66,6 @@ def build_resultado_fundos(detalhe_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     grouped["duration_ponderado"] = grouped["weighted_value_total"] / grouped["vl_posicao_total"]
-    grouped["desenquadrado_720"] = grouped["duration_ponderado"] > DESENQUADRAMENTO_LIMITE
+    grouped["desenquadrado_720"] = grouped["duration_ponderado"] < DESENQUADRAMENTO_LIMITE
 
     return grouped

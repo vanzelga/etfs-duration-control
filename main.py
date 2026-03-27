@@ -1,29 +1,55 @@
+import sys
+from datetime import datetime, timedelta
+
 from src.metabase_client import fetch_metabase_data
 from src.anbima_client import fetch_anbima_data
 from src.calculator import build_detalhe_ativos, build_resultado_fundos
 from src.excel_exporter import save_output_excel
 from src.utils import ensure_dirs
 
+
 # ============================================================
 # CONFIG
 # ============================================================
 OUTPUT_DIR = r"C:\composicao"
 DEBUG_DIR = rf"{OUTPUT_DIR}\debug"
-DATA_CARTEIRA = "2026-03-25"
+
+
+def get_data_carteira() -> str:
+    """
+    Reads the portfolio date from command-line argument.
+
+    Expected format:
+    python main.py 2026-03-25
+    """
+    if len(sys.argv) >= 2:
+        data_carteira = sys.argv[1].strip()
+
+        try:
+            datetime.strptime(data_carteira, "%Y-%m-%d")
+            return data_carteira
+        except ValueError:
+            raise ValueError("Invalid date format. Use YYYY-MM-DD.")
+
+    # Fallback: previous calendar day
+    return (datetime.today().date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
 def main():
     ensure_dirs(OUTPUT_DIR, DEBUG_DIR)
 
-    print(f"Buscando Meta para {DATA_CARTEIRA}...")
-    meta_df = fetch_metabase_data(DATA_CARTEIRA)
+    data_carteira = get_data_carteira()
+
+    print(f"Buscando Meta para {data_carteira}...")
+    meta_df = fetch_metabase_data(data_carteira)
+    meta_df["DataCarteira"] = data_carteira
     if meta_df.empty:
         print("Meta sem dados.")
         return
     print(f"Meta ok | linhas: {len(meta_df)}")
 
-    print(f"Buscando ANBIMA para {DATA_CARTEIRA}...")
-    anbima_df = fetch_anbima_data(DATA_CARTEIRA, DEBUG_DIR)
+    print(f"Buscando ANBIMA para {data_carteira}...")
+    anbima_df = fetch_anbima_data(data_carteira, DEBUG_DIR)
     if anbima_df.empty:
         print("ANBIMA sem dados.")
         return
@@ -34,7 +60,7 @@ def main():
 
     output_file = save_output_excel(
         output_dir=OUTPUT_DIR,
-        data_carteira=DATA_CARTEIRA,
+        data_carteira=data_carteira,
         meta_df=meta_df,
         anbima_df=anbima_df,
         detalhe_df=detalhe_df,
