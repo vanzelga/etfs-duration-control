@@ -1,73 +1,57 @@
 import json
 import os
-from datetime import datetime
 
 import pandas as pd
 import requests
 
-
-OUTPUT_DIR = r"C:\composicao"
 META_BASE_URL = "http://metabase-funds/api/public/card/353113d3-65c5-4912-aafa-6aed1ef5cac3/query/json"
-
-# Example: "2026-03-25"
-DATA_CARTEIRA = "2026-03-25"
-
-
-def ensure_output_dir() -> None:
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+META_PARAMETER_ID = "08263a25-a495-9bb4-ec3c-d27f3be5a69b"
+TIMEOUT = 60
 
 
-def build_parameters(data_carteira: str) -> str:
+def build_metabase_parameters(data_carteira: str) -> str:
     payload = [
         {
             "type": "date/single",
             "value": data_carteira,
             "target": ["variable", ["template-tag", "DataCarteira"]],
-            "id": "08263a25-a495-9bb4-ec3c-d27f3be5a69b",
+            "id": META_PARAMETER_ID,
         }
     ]
     return json.dumps(payload, separators=(",", ":"))
 
 
-def fetch_metabase_data(data_carteira: str) -> pd.DataFrame:
-    params = {"parameters": build_parameters(data_carteira)}
-
-    response = requests.get(META_BASE_URL, params=params, timeout=60)
+def fetch_metabase_data(data_carteira: str):
+    params = {"parameters": build_metabase_parameters(data_carteira)}
+    response = requests.get(META_BASE_URL, params=params, timeout=TIMEOUT)
     response.raise_for_status()
 
+    raw_text = response.text
     data = response.json()
-    return pd.DataFrame(data)
-
-
-def save_outputs(df: pd.DataFrame, data_carteira: str) -> None:
-    date_tag = datetime.strptime(data_carteira, "%Y-%m-%d").strftime("%Y%m%d")
-
-    excel_path = os.path.join(OUTPUT_DIR, f"meta_posicao_{date_tag}.xlsx")
-    json_path = os.path.join(OUTPUT_DIR, f"meta_posicao_{date_tag}.json")
-
-    df.to_excel(excel_path, index=False)
-    df.to_json(json_path, orient="records", force_ascii=False, indent=2)
-
-    print(f"Excel salvo em: {excel_path}")
-    print(f"JSON salvo em: {json_path}")
-
-
-def main():
-    ensure_output_dir()
-
-    print(f"Buscando Meta para {DATA_CARTEIRA}...")
-    df = fetch_metabase_data(DATA_CARTEIRA)
+    df = pd.DataFrame(data)
 
     if df.empty:
-        print("Nenhum dado retornado.")
-        return
+        return df, raw_text
 
-    print(f"Linhas: {len(df)}")
-    print("Colunas:")
-    print(list(df.columns))
+    df["DataCarteira"] = data_carteira
+    df["NuIsin"] = df["NuIsin"].astype(str).str.strip().str.upper()
 
-    save_outputs(df, DATA_CARTEIRA)
+    return df, raw_text
 
 
-if __name__ == "__main__":
-    main()
+def save_metabase_snapshots(df: pd.DataFrame, raw_text: str, output_root: str, data_carteira: str) -> None:
+    raw_dir = os.path.join(output_root, "meta_raw")
+    parsed_dir = os.path.join(output_root, "meta_parsed")
+
+    os.makedirs(raw_dir, exist_ok=True)
+    os.makedirs(parsed_dir, exist_ok=True)
+
+    date_tag = data_carteira.replace("-", "")
+
+    raw_path = os.path.join(raw_dir, f"meta_{date_tag}.json")
+    parsed_path = os.path.join(parsed_dir, f"meta_{date_tag}.xlsx")
+
+    with open(raw_path, "w", encoding="utf-8") as f:
+        f.write(raw_text)
+
+    df.to_excel(parsed_path, index=False)

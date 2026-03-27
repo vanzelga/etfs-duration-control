@@ -1,8 +1,9 @@
+import os
 import sys
 from datetime import datetime, timedelta
 
-from src.metabase_client import fetch_metabase_data
-from src.anbima_client import fetch_anbima_data
+from src.metabase_client import fetch_metabase_data, save_metabase_snapshots
+from src.anbima_client import fetch_anbima_data, save_anbima_snapshots
 from src.calculator import build_detalhe_ativos, build_resultado_fundos
 from src.excel_exporter import save_output_excel
 from src.utils import ensure_dirs
@@ -12,16 +13,10 @@ from src.utils import ensure_dirs
 # CONFIG
 # ============================================================
 OUTPUT_DIR = r"C:\composicao"
-DEBUG_DIR = rf"{OUTPUT_DIR}\debug"
+DEBUG_DIR = os.path.join(OUTPUT_DIR, "debug")
 
 
 def get_data_carteira() -> str:
-    """
-    Reads the portfolio date from command-line argument.
-
-    Expected format:
-    python main.py 2026-03-25
-    """
     if len(sys.argv) >= 2:
         data_carteira = sys.argv[1].strip()
 
@@ -31,7 +26,6 @@ def get_data_carteira() -> str:
         except ValueError:
             raise ValueError("Invalid date format. Use YYYY-MM-DD.")
 
-    # Fallback: previous calendar day
     return (datetime.today().date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
@@ -41,21 +35,33 @@ def main():
     data_carteira = get_data_carteira()
 
     print(f"Buscando Meta para {data_carteira}...")
-    meta_df = fetch_metabase_data(data_carteira)
+    meta_df, meta_raw_text = fetch_metabase_data(data_carteira)
     meta_df["DataCarteira"] = data_carteira
+
     if meta_df.empty:
         print("Meta sem dados.")
         return
+
+    save_metabase_snapshots(meta_df, meta_raw_text, OUTPUT_DIR, data_carteira)
     print(f"Meta ok | linhas: {len(meta_df)}")
 
     print(f"Buscando ANBIMA para {data_carteira}...")
-    anbima_df = fetch_anbima_data(data_carteira, DEBUG_DIR)
+    anbima_df, anbima_raw_text = fetch_anbima_data(data_carteira, DEBUG_DIR)
+
     if anbima_df.empty:
         print("ANBIMA sem dados.")
         return
+
+    save_anbima_snapshots(anbima_df, anbima_raw_text, OUTPUT_DIR, data_carteira)
     print(f"ANBIMA ok | linhas: {len(anbima_df)}")
 
     detalhe_df, erros_df = build_detalhe_ativos(meta_df, anbima_df)
+
+    if not erros_df.empty:
+        raise ValueError(
+            f"Foram encontrados {len(erros_df)} casos de NTNB elegivel sem correspondencia na ANBIMA. Verifique a base e rode novamente."
+        )
+
     resultado_df = build_resultado_fundos(detalhe_df)
 
     output_file = save_output_excel(

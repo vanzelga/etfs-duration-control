@@ -1,4 +1,6 @@
+import os
 import re
+
 import pandas as pd
 import requests
 
@@ -22,7 +24,9 @@ def save_text_debug(debug_dir: str, file_name: str, text: str) -> None:
     if not SALVAR_DEBUG:
         return
 
-    file_path = rf"{debug_dir}\{file_name}"
+    os.makedirs(debug_dir, exist_ok=True)
+
+    file_path = os.path.join(debug_dir, file_name)
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(text)
 
@@ -138,7 +142,7 @@ def parse_anbima_carteira_text(raw_text: str) -> pd.DataFrame:
     return df
 
 
-def fetch_anbima_data(data_carteira: str, debug_dir: str) -> pd.DataFrame:
+def fetch_anbima_data(data_carteira: str, debug_dir: str):
     ref_date = parse_iso_date(data_carteira)
     raw_text = fetch_anbima_raw(ref_date, debug_dir)
 
@@ -150,4 +154,22 @@ def fetch_anbima_data(data_carteira: str, debug_dir: str) -> pd.DataFrame:
     if df.empty:
         raise ValueError("ANBIMA response was received, but parsing returned no rows.")
 
-    return df
+    return df, raw_text
+
+
+def save_anbima_snapshots(df: pd.DataFrame, raw_text: str, output_root: str, data_carteira: str) -> None:
+    raw_dir = os.path.join(output_root, "anbima_raw")
+    parsed_dir = os.path.join(output_root, "anbima_parsed")
+
+    os.makedirs(raw_dir, exist_ok=True)
+    os.makedirs(parsed_dir, exist_ok=True)
+
+    date_tag = data_carteira.replace("-", "")
+
+    raw_path = os.path.join(raw_dir, f"anbima_{date_tag}.txt")
+    parsed_path = os.path.join(parsed_dir, f"anbima_{date_tag}.xlsx")
+
+    with open(raw_path, "w", encoding="utf-8") as f:
+        f.write(raw_text)
+
+    df.to_excel(parsed_path, index=False)
